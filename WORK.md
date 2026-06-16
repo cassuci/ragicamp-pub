@@ -30,6 +30,7 @@ https://github.com/cassuci/ragicamp-pub
 - [x] Added placeholder `outputs/README.md` and `artifacts/README.md`.
 - [x] Rewrote public `README.md`.
 - [x] Added `VALIDATION.md`.
+- [x] Added `PROVENANCE.md` documenting representativeness vs. SLM study run dates.
 - [x] Added `conf/study/public_smoke.yaml`.
 - [x] Unit tests passed before final doc/script inspection: `720 passed, 3 warnings`.
 - [x] Public smoke dry-run passed.
@@ -77,6 +78,10 @@ Plan: [`PLAN.md`](PLAN.md).
 - [ ] Add `LICENSE`.
 - [ ] Add `CITATION.cff`.
 - [ ] Decide whether notebooks should be kept in full or reduced to analysis utility scripts.
+
+## Provenance conclusion
+
+See [`PROVENANCE.md`](PROVENANCE.md). The public repo is representative of the SLM study framework lineage, but not a byte-for-byte run-date archive: preserved output metadata has timestamps but no git SHA, and the main run spanned 2026-02-10 to 2026-02-21. The selected public base (`fbce71c`, 2026-03-02) is pre-RL and has no core framework or `smart_retrieval_slm.yaml` changes relative to the final-run-adjacent commit (`0fc2341`, 2026-02-20).
 
 ## Notes
 

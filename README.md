@@ -41,6 +41,10 @@ Check the CLI:
 uv run ragicamp --help
 ```
 
+## Provenance
+
+This is a curated clean-history public release derived from the pre-RL RAGiCamp framework lineage used for the SLM/RAG study. See [`PROVENANCE.md`](PROVENANCE.md) for the run-date comparison and validation notes.
+
 ## Validate the repository
 
 Run the unit test suite:
