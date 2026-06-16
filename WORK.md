@@ -65,11 +65,11 @@ Plan: [`PLAN.md`](PLAN.md).
 
 ### P1 — Final public hygiene
 
-- [ ] Remove generated `.venv/`, `outputs/*`, `artifacts/cache`, `artifacts/indexes`, `__pycache__` before commit.
-- [ ] Run large-file scan.
-- [ ] Run private/internal/RL scan.
+- [x] Remove generated `.venv/`, `outputs/*`, `artifacts/cache`, `artifacts/indexes`, `__pycache__` before commit.
+- [x] Run large-file scan.
+- [x] Run private/internal/RL scan.
 - [x] Update `VALIDATION.md` with final smoke results.
-- [ ] Commit and push final public repo changes.
+- [x] Commit and push final public repo changes (`d40c5ce`).
 
 ### P2 — Optional polish
 
