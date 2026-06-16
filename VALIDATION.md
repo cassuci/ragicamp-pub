@@ -63,6 +63,29 @@ metric computation, and output writing. It writes standard experiment files unde
 `outputs/public_e2e_smoke/` during validation; these generated files are not
 committed.
 
+## End-to-end Optuna/TPE smoke
+
+Command:
+
+```bash
+uv run ragicamp run conf/study/public_e2e_smoke.yaml --limit 1 --force --sample 2 --sample-mode tpe --sample-seed 42
+```
+
+Result:
+
+```text
+Study Complete: public_e2e_smoke
+Baselines — Completed: 1, Failed: 0, Skipped: 0
+Optuna — Trials: 2, Pruned: 1
+Best trial: 0.0000 (trial #0)
+```
+
+This goes one step beyond the fixed-grid smoke by exercising Optuna/TPE trial
+creation, RAG trial execution, SQLite study persistence, duplicate-trial pruning,
+and best-trial reporting. It also caught and fixed a public-copy search-space bug
+where Optuna did not infer retriever choices from `rag.retrievers` when
+`rag.retriever_names` was omitted.
+
 ## Paper-study config dry-run
 
 Command:

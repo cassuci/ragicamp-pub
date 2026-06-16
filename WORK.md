@@ -62,6 +62,7 @@ Plan: [`PLAN.md`](PLAN.md).
 - [x] `uv run ragicamp run conf/study/smart_retrieval_slm.yaml --dry-run --limit 1`.
 - [x] `uv run ragicamp index --corpus simple --embedding mock --max-docs 5`.
 - [x] `uv run ragicamp run conf/study/public_e2e_smoke.yaml --limit 1 --force`.
+- [x] `uv run ragicamp run conf/study/public_e2e_smoke.yaml --limit 1 --force --sample 2 --sample-mode tpe --sample-seed 42` (Optuna/TPE path).
 
 ### P1 — Final public hygiene
 

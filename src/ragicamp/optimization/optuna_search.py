@@ -75,9 +75,15 @@ def _extract_search_space(config: dict[str, Any]) -> dict[str, list[Any]]:
     """
     rag = config.get("rag", {})
 
+    retriever_names = rag.get("retriever_names")
+    if retriever_names is None:
+        retriever_names = [
+            r.get("name") if isinstance(r, dict) else r for r in rag.get("retrievers", [])
+        ]
+
     space: dict[str, list[Any]] = {
         "model": rag.get("models", []),
-        "retriever": rag.get("retriever_names", []),
+        "retriever": retriever_names,
         "top_k": rag.get("top_k_values", [5]),
         "prompt": rag.get("prompts", ["concise"]),
         "query_transform": rag.get("query_transform", ["none"]),
@@ -207,6 +213,8 @@ def _build_retriever_lookup(config: dict[str, Any]) -> dict[str, dict[str, Any]]
     for ret_config in rag.get("retrievers", []):
         if isinstance(ret_config, dict):
             lookup[ret_config["name"]] = ret_config
+        elif isinstance(ret_config, str):
+            lookup[ret_config] = {"name": ret_config}
     return lookup
 
 
