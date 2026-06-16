@@ -1,0 +1,48 @@
+# Simple HF Study - HuggingFace models only (no OpenAI API calls)
+# Run: make run-baseline-simple-hf
+
+name: simple_hf
+description: "Dev baseline with HF models only - no API costs (10 questions)"
+
+# Limit questions for speed
+num_questions: 10
+
+# All datasets
+datasets:
+  - nq
+  - triviaqa
+  - hotpotqa
+
+# DirectLLM experiments - HF models only
+direct:
+  enabled: true
+  models:
+    - hf:google/gemma-2b-it
+    # - hf:microsoft/phi-2
+  prompts:
+    - default
+    - concise
+    - detailed
+
+# RAG experiments - HF models only
+rag:
+  enabled: true
+  models:
+    - hf:google/gemma-2b-it
+  retrievers:
+    - simple_minilm_recursive_512
+  top_k_values:
+    - 5
+  prompts:
+    - default
+
+# Metrics that don't need OpenAI
+metrics:
+  - f1
+  - exact_match
+  - bertscore
+  - bleurt
+  # Note: llm_judge requires OpenAI, so excluded
+
+# Output
+output_dir: outputs/simple_hf

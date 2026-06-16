@@ -1,0 +1,106 @@
+# Few-Shot Examples for Each Dataset
+# These examples are sampled from training sets to create in-context learning prompts
+#
+# Usage: These get loaded by run_study.py for fewshot_* prompt types
+
+# =============================================================================
+# Natural Questions - Short factoid answers from Wikipedia
+# =============================================================================
+nq:
+  description: "Real Google search queries with Wikipedia answers"
+  style: "Give ONLY the answer - a single entity, date, or number. Do NOT add extra questions or explanations."
+  stop_instruction: "IMPORTANT: Give only ONE short answer. Stop immediately after answering. Do NOT generate additional questions."
+  knowledge_instruction: "Use the passages to find the answer."
+  examples:
+    - question: "who got the first nobel prize in physics"
+      answer: "Wilhelm Conrad Röntgen"
+    - question: "when did the us enter world war 1"
+      answer: "April 6, 1917"
+    - question: "who wrote the book the origin of species"
+      answer: "Charles Darwin"
+    - question: "what is the largest ocean on earth"
+      answer: "Pacific Ocean"
+    - question: "who was the first president of the united states"
+      answer: "George Washington"
+
+# =============================================================================
+# TriviaQA - Trivia questions with multiple answer variations
+# =============================================================================
+triviaqa:
+  description: "Trivia questions from quiz leagues and trivia websites"
+  style: "Give ONLY the answer - the exact entity, name, or term. No explanations."
+  stop_instruction: "IMPORTANT: Give only ONE short answer. Stop immediately after answering. Do NOT generate additional questions."
+  knowledge_instruction: "Use the passages to find the answer."
+  examples:
+    - question: "Who was the first American in space?"
+      answer: "Alan Shepard"
+    - question: "What is the chemical symbol for gold?"
+      answer: "Au"
+    - question: "In which country is the Great Barrier Reef located?"
+      answer: "Australia"
+    - question: "Who painted the Mona Lisa?"
+      answer: "Leonardo da Vinci"
+    - question: "What is the capital of Japan?"
+      answer: "Tokyo"
+
+# =============================================================================
+# HotpotQA - Multi-hop reasoning questions
+# =============================================================================
+hotpotqa:
+  description: "Questions requiring reasoning over multiple facts"
+  style: "Give ONLY the final answer - a name, date, yes/no, or short phrase. No reasoning steps."
+  stop_instruction: "IMPORTANT: Give only ONE short answer. Stop immediately after answering. Do NOT generate additional questions."
+  knowledge_instruction: "Use the passages to find the answer. You may need to combine information from multiple passages."
+  examples:
+    - question: "What government position was held by the woman who portrayed Nadia in the film The Survey?"
+      answer: "Deputy Prime Minister of Israel"
+    - question: "Are both Coldplay and Pierre Bouvier from the same country?"
+      answer: "no"
+    - question: "What is the name of the fight song of the university that is the setting for the TV series Blue Mountain State?"
+      answer: "Penn State Fight Song"
+    - question: "Which band has more members, Fall Out Boy or Paramore?"
+      answer: "Fall Out Boy"
+    - question: "The director of the 2003 film 'Monster' was born in what year?"
+      answer: "1955"
+
+# =============================================================================
+# Negative examples - what NOT to do
+# =============================================================================
+negative_examples:
+  # These show common mistakes models make that we want to avoid
+  bad_continuations:
+    - question: "when did the us enter world war 1"
+      bad_answer: |
+        April 6, 1917
+
+        Question: who was the president during ww1
+        Answer: Woodrow Wilson
+
+        Question: how long did ww1 last
+        Answer: 4 years
+      why_bad: "Model continued generating more Q&A pairs instead of stopping"
+      good_answer: "April 6, 1917"
+
+  bad_verbose:
+    - question: "what is the capital of france"
+      bad_answer: "Based on the context provided, I can see that the capital of France is Paris, which is a beautiful city known for its culture and history."
+      why_bad: "Too verbose - just answer the question"
+      good_answer: "Paris"
+
+  bad_refusal:
+    - question: "who won the 2020 election"
+      bad_answer: "I cannot determine from the context who won the 2020 election as the information provided does not contain this specific detail."
+      why_bad: "If you don't know, say 'Unknown' - don't explain why"
+      good_answer: "Unknown"
+
+# =============================================================================
+# Prompt Templates (for reference - actual prompts built in code)
+# =============================================================================
+templates:
+  # Note: These templates are built programmatically in study.py
+  # They include:
+  # - Clear instructions to give ONE answer only
+  # - Stop instructions to prevent continuation
+  # - Examples formatted as "Question: ... Answer: ..." (not Q:/A:)
+  note: "See src/ragicamp/cli/study.py for actual prompt construction"
+

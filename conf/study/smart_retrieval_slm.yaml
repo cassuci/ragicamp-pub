@@ -1,0 +1,413 @@
+# Smart Retrieval with Small Language Models
+# 
+# Run: uv run ragicamp run conf/study/smart_retrieval_slm.yaml --dry-run
+#
+# =============================================================================
+# HYPOTHESIS
+# =============================================================================
+# "High-quality retrieval can compensate for smaller, faster LLMs."
+#
+# We invest computational budget in retrieval (good embeddings, reranking,
+# advanced agents) rather than in large generators. This tests whether
+# RAG quality is bottlenecked by retrieval or generation.
+#
+# =============================================================================
+# DESIGN
+# =============================================================================
+# - Uses Optuna TPE Bayesian optimization over the full RAG grid
+# - Agent strategies (iterative_rag, self_rag) are conditional dimensions
+#   in the search space — Optuna learns which agents + params work best
+# - Direct baselines run as a fixed grid for comparison
+#
+# Model Tiers:
+#   Tiny (1-2B):   Qwen2.5-1.5B, Gemma2-2B
+#   Small (3-4B):  Llama-3.2-3B, Qwen2.5-3B
+#   Medium (7-9B): Mistral-7B, Qwen2.5-7B, Gemma2-9B
+#
+# Embeddings: BGE-large (BERT), BGE-M3 (multilingual), GTE-Qwen2-1.5B (fast + strong)
+# Advanced retrieval: Hybrid (TF-IDF/BM25), Hierarchical, reranking
+# Query transforms: HyDE, MultiQuery
+# Prompts: concise, structured, extractive, cot, fewshot_3, fewshot_1
+#
+# Hardware: Single GPU with 48GB+ VRAM (B200 recommended)
+
+name: smart_retrieval_slm
+description: "Test if premium retrieval compensates for smaller generators"
+
+# Sample size per experiment
+num_questions: 1000
+
+# Datasets to test
+datasets:
+  - nq
+  - triviaqa
+  - hotpotqa
+
+# =============================================================================
+# Metrics
+# =============================================================================
+metrics:
+  - f1
+  - exact_match
+  - bertscore
+  - bleurt
+
+llm_judge:
+  model: openai:gpt-4o-mini
+  judgment_type: binary
+
+# =============================================================================
+# SLM Models (shared across Direct and RAG)
+# =============================================================================
+# Using YAML anchors to ensure both Direct and RAG use identical models
+#
+# Model tiers:
+#   - Tiny (1-2B): Test lower bound - can premium retrieval compensate?
+#   - Small (3-4B): Main SLM tier - sweet spot for the hypothesis
+#   - Medium (7-9B): Upper bound - compare to see diminishing returns
+#
+models: &slm_models
+  # ---------------------------------------------------------------------------
+  # TINY MODELS (1-2B) - Lower bound test
+  # ---------------------------------------------------------------------------
+  - vllm:Qwen/Qwen2.5-1.5B-Instruct           # Excellent 1.5B, works with raw prompts
+  - vllm:google/gemma-2-2b-it                  # Gemma 2 architecture, 2B
+
+  # ---------------------------------------------------------------------------
+  # SMALL MODELS (3-4B) - Main SLM tier
+  # ---------------------------------------------------------------------------
+  - vllm:meta-llama/Llama-3.2-3B-Instruct     # Meta, solid baseline
+  # Phi-3-mini removed: 4096 context limit causes ~24% of all trial failures
+  # (context overflow with most RAG configs, especially high top_k + fewshot)
+  - vllm:Qwen/Qwen2.5-3B-Instruct             # Alibaba, best MMLU in 3B class
+
+  # ---------------------------------------------------------------------------
+  # MEDIUM MODELS (7-9B) - Upper bound comparison
+  # ---------------------------------------------------------------------------
+  - vllm:mistralai/Mistral-7B-Instruct-v0.3   # Mistral, efficient 7B
+  - vllm:Qwen/Qwen2.5-7B-Instruct             # Qwen 7B, strong performer
+  - vllm:google/gemma-2-9b-it                 # Gemma 2, 9B (best in class)
+
+# =============================================================================
+# DirectLLM Baseline (grid search for comparison)
+# =============================================================================
+# These provide "no retrieval" baselines to measure RAG improvement.
+# Using concise + fewshot_3 as the main comparison points.
+# Note: extractive doesn't make sense for direct (no context to extract from)
+direct:
+  enabled: true
+  models: *slm_models
+  prompts:
+    - concise       # Baseline - minimal
+    - fewshot_3     # Few-shot for comparison with RAG
+
+# =============================================================================
+# RAG Configuration (Grid Search)
+# =============================================================================
+# Grid search generates: Models × Retrievers × TopK × QueryTransforms × Rerankers × Prompts × Datasets
+#
+# To enable random search mode, uncomment the sampling section below.
+
+rag:
+  enabled: true
+  models: *slm_models
+  
+  # --------------------------------------------------------------------------
+  # Sampling Mode (Optuna TPE)
+  # --------------------------------------------------------------------------
+  # Optuna explores the full grid (models × retrievers × top_k × qt × reranker
+  # × prompts × datasets × agent_types) using Bayesian optimization.
+  # Agent-specific params (e.g. max_iterations for iterative_rag) are
+  # conditionally suggested only when the corresponding agent_type is chosen.
+  # Direct baselines are always run as a fixed grid for comparison.
+  sampling:
+    mode: tpe               # Bayesian optimization (TPE) to find best RAG configs
+    n_experiments: 1000     # Target trials from RAG grid combinations
+    optimize_metric: f1     # Metric to maximize
+    seed: 42                # Reproducible sampler
+    trial_timeout: 1800     # Kill subprocess after 30 min (was 60min; configs needing >30min are degenerate)
+    # Stratified search: these dimensions are explored uniformly via
+    # round-robin instead of being optimized by TPE.  This prevents the
+    # optimizer from biasing towards easy datasets or strong models.
+    # Remove a dimension here if you genuinely want TPE to optimize it.
+    fixed_dims:
+      - dataset
+      - model
+    # Context window constraints: prune combos that would overflow the
+    # model's context window (avoids wasting GPU on guaranteed failures).
+    # estimated_input ≈ (chunk_chars / chars_per_token) × top_k + overhead
+    constraints:
+      chars_per_token: 4       # rough char→token ratio for chunk sizes
+      generation_buffer: 256   # tokens reserved for model output
+      default_context_length: 32768
+      model_context_lengths:
+        "vllm:google/gemma-2-2b-it": 8192
+        "vllm:google/gemma-2-9b-it": 8192
+      prompt_overhead_tokens:
+        default: 500
+        concise: 400
+        concise_strict: 450
+        concise_json: 450
+        extractive: 450
+        extractive_quoted: 500
+        structured: 500
+        cot: 550
+        cot_final: 600
+        fewshot_1: 800
+        fewshot_3: 1500
+    # Agent strategies: Optuna conditionally suggests agent-specific params
+    agent_types:
+      - fixed_rag           # Standard single-pass RAG (default)
+      - iterative_rag       # Multi-iteration query refinement
+      - self_rag            # Adaptive retrieval (model decides when to retrieve)
+    agent_params:
+      iterative_rag:
+        max_iterations: [1, 2]       # Dropped 3: main cause of timeouts & failures (RL agent can learn iteration policy)
+        stop_on_sufficient: [true]
+      self_rag:
+        retrieval_threshold: [0.3, 0.5, 0.7]
+        verify_answer: [true, false]
+        fallback_to_direct: [true]
+  
+  # --------------------------------------------------------------------------
+  # Corpus: Wikipedia (filtered by importance)
+  # --------------------------------------------------------------------------
+  corpus:
+    source: wikimedia/wikipedia
+    version: 20231101.en
+    max_docs: 200000
+    wikirank_top_k: 200000
+    streaming: false
+    num_proc: 128
+    # doc_batch_size: Number of documents per embedding batch.
+    doc_batch_size: 5000
+    embedding_batch_size: 4096  # Only used for sentence_transformers, vLLM ignores
+    # Embedding backend configuration (used during index building)
+    embedding:
+      backend: vllm
+      vllm_gpu_memory_fraction: 0.9  # High fraction for index building (no generator running)
+      # vllm_enforce_eager: removed — not wired into generator provider
+  
+  # --------------------------------------------------------------------------
+  # Retrievers (referenced by grid search)
+  # --------------------------------------------------------------------------
+  # The grid search will use the 'name' field to reference these configs.
+  # Index building uses full config, experiments use name reference.
+  retrievers:
+    # =========================================================================
+    # DENSE RETRIEVERS
+    # =========================================================================
+    # NOTE: embedding_index maps logical names to actual index directories
+    # Index naming convention: {lang}_{model_shortname}_c{chunk}_o{overlap}
+    
+    # BGE-large: BERT-based, proven MTEB performer
+    # vLLM supports BERT-based embedding models via BertEmbeddingModel
+    # See: https://docs.vllm.ai/en/latest/api/vllm/model_executor/models/bert/
+    - type: dense
+      name: dense_bge_large_512
+      embedding_index: en_bge_large_en_v1.5_c512_o50  # Actual index on disk
+      embedding_model: BAAI/bge-large-en-v1.5
+      embedding_backend: vllm
+      chunk_size: 512
+      chunk_overlap: 50
+      chunking_strategy: recursive
+      index_type: hnsw
+    
+    # BGE-M3: Multilingual, good for diverse queries
+    - type: dense
+      name: dense_bge_m3_512
+      embedding_index: en_bge_m3_c512_o50  # Actual index on disk
+      embedding_model: BAAI/bge-m3
+      embedding_backend: vllm
+      chunk_size: 512
+      chunk_overlap: 50
+      chunking_strategy: recursive
+      index_type: hnsw
+    
+    # =========================================================================
+    # HIGH-PERFORMANCE EMBEDDING MODELS (vLLM 0.15+)
+    # =========================================================================
+    
+    # GTE-Qwen2-1.5B: Fast with strong MTEB scores (~67)
+    # 1.5B params, good balance of speed and quality
+    - type: dense
+      name: dense_gte_qwen2_1.5b_512
+      embedding_index: en_gte_qwen2_1.5b_instruct_c512_o50  # Actual index on disk
+      embedding_model: Alibaba-NLP/gte-Qwen2-1.5B-instruct
+      embedding_backend: vllm
+      chunk_size: 512
+      chunk_overlap: 50
+      chunking_strategy: recursive
+      index_type: hnsw
+    
+    # E5-Mistral: 7B decoder, top MTEB retrieval scores
+    - type: dense
+      name: dense_e5_mistral_512
+      embedding_index: en_e5_mistral_7b_instruct_c512_o50  # Actual index on disk
+      embedding_model: intfloat/e5-mistral-7b-instruct
+      embedding_backend: vllm
+      chunk_size: 512
+      chunk_overlap: 50
+      chunking_strategy: recursive
+      index_type: hnsw
+    
+    # =========================================================================
+    # HYBRID RETRIEVERS (Dense + Sparse)
+    # =========================================================================
+    # Hybrid retrievers reuse the dense index + add sparse index.
+    # Alpha (dense/sparse blend) is now an Optuna dimension — one retriever
+    # entry per unique (embedding + sparse) pair.  Optuna explores alpha_values.
+
+    # Hybrid BGE-large + BM25
+    - type: hybrid
+      name: hybrid_bge_large_bm25
+      embedding_index: en_bge_large_en_v1.5_c512_o50  # Reuses dense index
+      sparse_index: en_bge_large_en_v1.5_c512_o50_sparse_bm25
+      embedding_model: BAAI/bge-large-en-v1.5
+      embedding_backend: vllm
+      sparse_method: bm25
+      alpha: 0.5  # Default — overridden by Optuna when alpha_values is set
+      chunk_size: 512
+      chunk_overlap: 50
+      index_type: hnsw
+
+    # Hybrid BGE-large + TF-IDF
+    - type: hybrid
+      name: hybrid_bge_large_tfidf
+      embedding_index: en_bge_large_en_v1.5_c512_o50  # Reuses dense index
+      sparse_index: en_bge_large_en_v1.5_c512_o50_sparse_tfidf
+      embedding_model: BAAI/bge-large-en-v1.5
+      embedding_backend: vllm
+      sparse_method: tfidf
+      alpha: 0.5  # Default — overridden by Optuna when alpha_values is set
+      chunk_size: 512
+      chunk_overlap: 50
+      index_type: hnsw
+
+    # Hybrid GTE-Qwen2 + BM25
+    - type: hybrid
+      name: hybrid_gte_qwen2_bm25
+      embedding_index: en_gte_qwen2_1.5b_instruct_c512_o50  # Reuses GTE dense index
+      embedding_model: Alibaba-NLP/gte-Qwen2-1.5B-instruct
+      embedding_backend: vllm
+      sparse_method: bm25
+      alpha: 0.5  # Default — overridden by Optuna when alpha_values is set
+      chunk_size: 512
+      chunk_overlap: 50
+      index_type: hnsw
+    
+    # =========================================================================
+    # HIERARCHICAL RETRIEVERS (Parent-Child Chunks)
+    # =========================================================================
+    # Naming: hier_{model}_{parent}p_{child}c
+    # Search small child chunks for precision, return larger parent chunks for context
+    
+    # Hierarchical BGE-large: 2048 parent / 448 child
+    - type: hierarchical
+      name: hier_bge_large_2048p_448c
+      embedding_index: hier_bge_large_2048p_448c
+      embedding_model: BAAI/bge-large-en-v1.5
+      embedding_backend: vllm
+      parent_chunk_size: 2048
+      child_chunk_size: 448
+      index_type: hnsw
+  
+  # --------------------------------------------------------------------------
+  # Grid Search Dimensions
+  # --------------------------------------------------------------------------
+  # Which retrievers to test in grid search (by name)
+  # 
+  # STRATEGY: Compare embedding models with different characteristics
+  # - BGE Large: proven baseline, fast inference
+  # - BGE M3: multilingual capability  
+  # - GTE-Qwen2-1.5B: fast with strong MTEB scores (requires vLLM 0.15+)
+  # - Hybrid: combines dense + BM25
+  #
+  retriever_names:
+    - dense_bge_large_512           # Built - proven baseline
+    - dense_bge_m3_512              # Built - multilingual
+    - dense_gte_qwen2_1.5b_512      # Built - fast, strong (1.5B params)
+    # - dense_e5_mistral_512        # 7B decoder - too large for RAM
+    - hybrid_bge_large_bm25         # Dense + BM25 (alpha explored by Optuna)
+    - hybrid_bge_large_tfidf        # Dense + TF-IDF (alpha explored by Optuna)
+    - hybrid_gte_qwen2_bm25         # GTE + BM25 (alpha explored by Optuna)
+    - hier_bge_large_2048p_448c     # Hierarchical: search 448, return 2048
+  
+  top_k_values:
+    - 3
+    - 5
+    - 10
+    - 15   # More context with aggressive reranking
+    - 20   # Upper bound - tests if more retrieved docs help
+  
+  # Query transformation strategies
+  query_transform:
+    - none         # Baseline
+    - hyde         # Hypothetical document embeddings
+    - multiquery   # Multiple query variations
+  
+  # Reranker configurations
+  reranker:
+    configs:
+      - enabled: false
+        name: none
+      - enabled: true
+        name: bge
+      - enabled: true
+        name: bge-v2
+  
+  # Fetch K multiplier (documents to retrieve before reranking)
+  fetch_k_multiplier: 5  # fetch_k = top_k * 5 when reranking
+
+  # RRF fusion constant for hybrid retrievers (higher = more weight to lower ranks)
+  # Only used by hybrid retrievers; dense/hierarchical ignore this.
+  # These are conditional Optuna dimensions — suggested only for hybrid retrievers.
+  rrf_k_values:
+    - 20
+    - 40
+    - 60
+
+  # Alpha: dense/sparse blend for hybrid retrievers (0=sparse, 1=dense)
+  # Conditional Optuna dimension — suggested only for hybrid retrievers.
+  alpha_values:
+    - 0.3
+    - 0.5
+    - 0.7
+    - 0.9
+  
+  # --------------------------------------------------------------------------
+  # Prompt Strategies
+  # --------------------------------------------------------------------------
+  # Testing different prompting approaches to find what works best with SLMs:
+  # - concise variants: Minimal prompts that reduce hallucination
+  # - extractive variants: Strict context-only for grounding
+  # - cot variants: Reasoning for complex questions (HotpotQA)
+  # - fewshot: In-context learning with examples
+  #
+  prompts:
+    # --- Concise variants ---
+    - concise           # Baseline - minimal "just answer" style
+    - concise_strict    # More aggressive anti-hallucination (STOP instruction)
+    - concise_json      # Request JSON format for easier parsing
+    
+    # --- Extractive variants ---
+    - extractive        # Strict context-only - forces grounding
+    - extractive_quoted # Forces model to quote verbatim from passages
+    
+    # --- Chain-of-thought variants ---
+    - cot               # Chain-of-thought - good for HotpotQA multi-hop
+    - cot_final         # CoT with clear "FINAL ANSWER:" marker for extraction
+    
+    # --- Few-shot ---
+    - fewshot_3         # 3 few-shot examples from training set
+    - fewshot_1         # 1 example - lighter context, less token overhead
+
+# =============================================================================
+# Output Configuration
+# =============================================================================
+output_dir: outputs/smart_retrieval_slm
+
+# =============================================================================
+# Execution Settings
+# =============================================================================
+batch_size: 128

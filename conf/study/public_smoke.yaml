@@ -1,0 +1,22 @@
+# Public smoke configuration for validating config parsing/spec building.
+# Dry run only; running generation requires downloading the listed HuggingFace model.
+
+name: public_smoke
+description: "Tiny direct-LLM smoke config for public repository validation"
+
+datasets:
+  - nq
+
+metrics:
+  - f1
+  - exact_match
+
+direct:
+  enabled: true
+  models:
+    - hf:google/gemma-2b-it
+  prompts:
+    - concise
+
+rag:
+  enabled: false
