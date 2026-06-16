@@ -55,6 +55,14 @@ Validate config parsing/spec generation with the public smoke config:
 uv run ragicamp run conf/study/public_smoke.yaml --dry-run --limit 1
 ```
 
+Run a tiny end-to-end DirectLLM + FixedRAG pipeline with deterministic mock providers:
+
+```bash
+uv run ragicamp run conf/study/public_e2e_smoke.yaml --limit 1 --force
+```
+
+This builds a tiny local index, writes a retriever config, runs direct and RAG experiments, computes metrics, and writes standard output files under `outputs/public_e2e_smoke/`.
+
 ## Running studies
 
 Example dry run:
@@ -67,7 +75,13 @@ A full study requires model downloads, retrieval indexes, and appropriate GPU re
 
 ## Building indexes
 
-Use the CLI or scripts under `scripts/` to build retrieval indexes. For example:
+Use the CLI or scripts under `scripts/` to build retrieval indexes. For a no-download model smoke:
+
+```bash
+uv run ragicamp index --corpus simple --embedding mock --max-docs 5
+```
+
+For a small real embedding model:
 
 ```bash
 uv run ragicamp index --corpus simple --embedding minilm --max-docs 500

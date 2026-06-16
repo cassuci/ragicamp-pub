@@ -17,6 +17,42 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+class MockEmbedder:
+    """Deterministic hash-based embedder for smoke tests and public validation."""
+
+    dim = 16
+
+    def encode(
+        self,
+        sentences: list[str] | str,
+        batch_size: int = 256,
+        show_progress_bar: bool = True,
+        normalize_embeddings: bool = False,
+        **kwargs,
+    ) -> np.ndarray:
+        import hashlib
+
+        if isinstance(sentences, str):
+            sentences = [sentences]
+        rows = []
+        for text in sentences:
+            digest = hashlib.sha256(text.encode("utf-8")).digest()
+            values = np.frombuffer(digest[: self.dim], dtype=np.uint8).astype(np.float32)
+            values = (values / 127.5) - 1.0
+            if normalize_embeddings:
+                norm = np.linalg.norm(values)
+                if norm > 0:
+                    values = values / norm
+            rows.append(values)
+        return np.vstack(rows).astype(np.float32)
+
+    def get_sentence_embedding_dimension(self) -> int:
+        return self.dim
+
+    def unload(self) -> None:
+        return None
+
+
 @runtime_checkable
 class Embedder(Protocol):
     """Protocol defining the common interface for all embedding backends.
@@ -102,12 +138,15 @@ def create_embedder(
             max_num_batched_tokens=max_num_batched_tokens,
             max_model_len=max_model_len,
         )
-    else:
-        from .st_embedder import SentenceTransformerEmbedder
+    if backend == "mock":
+        logger.info("Creating mock embedder for: %s", model_name)
+        return MockEmbedder()
 
-        logger.info("Creating SentenceTransformer embedder for: %s", model_name)
-        return SentenceTransformerEmbedder(
-            model_name=model_name,
-            use_flash_attn=use_flash_attn,
-            use_compile=use_compile,
-        )
+    from .st_embedder import SentenceTransformerEmbedder
+
+    logger.info("Creating SentenceTransformer embedder for: %s", model_name)
+    return SentenceTransformerEmbedder(
+        model_name=model_name,
+        use_flash_attn=use_flash_attn,
+        use_compile=use_compile,
+    )

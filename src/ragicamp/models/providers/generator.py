@@ -71,6 +71,8 @@ class GeneratorProvider(ModelProvider):
 
                 if self.config.backend == "vllm":
                     generator = self._load_vllm(gpu_fraction)
+                elif self.config.backend == "mock":
+                    generator = MockGeneratorWrapper(self.config.model_name)
                 else:
                     generator = self._load_hf()
 
@@ -176,6 +178,16 @@ class Generator(ABC):
 
     def unload(self) -> None:  # noqa: B027
         """Unload model (optional override)."""
+
+
+class MockGeneratorWrapper(Generator):
+    """Deterministic generator used for smoke tests and public validation."""
+
+    def __init__(self, model_name: str):
+        self._model_name = model_name
+
+    def batch_generate(self, prompts: list[str], **kwargs) -> list[str]:
+        return ["mock answer" for _ in prompts]
 
 
 class VLLMGeneratorWrapper(Generator):

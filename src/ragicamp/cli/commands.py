@@ -107,6 +107,7 @@ def cmd_index(args: argparse.Namespace) -> int:
         "minilm": "all-MiniLM-L6-v2",
         "e5": "intfloat/e5-small-v2",
         "mpnet": "all-mpnet-base-v2",
+        "mock": "mock-embedder",
     }
     embedding_model = embedding_models.get(args.embedding, args.embedding)
 
@@ -142,9 +143,10 @@ def cmd_index(args: argparse.Namespace) -> int:
     chunker = DocumentChunker(chunk_config)
 
     # Create embedder provider
+    embedder_backend = "mock" if args.embedding == "mock" else "sentence_transformers"
     embedder_provider = ProviderFactory.create_embedder(
         embedding_model,
-        backend="sentence_transformers",  # Default for small models
+        backend=embedder_backend,  # Default for small real models
     )
 
     # Build and save index using provider pattern

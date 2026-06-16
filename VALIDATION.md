@@ -41,6 +41,28 @@ Total experiments: 1
 [DRY RUN] Would run the above experiments
 ```
 
+## End-to-end DirectLLM + FixedRAG smoke
+
+Command:
+
+```bash
+uv run ragicamp run conf/study/public_e2e_smoke.yaml --limit 1 --force
+```
+
+Result:
+
+```text
+Study Complete: public_e2e_smoke
+Baselines — Completed: 2, Failed: 0, Skipped: 0
+```
+
+This smoke uses deterministic `mock` providers to avoid GPU/API/model-download
+requirements while exercising the real study runner, dataset loading, index
+building, retriever-config writing, DirectLLM generation, FixedRAG retrieval,
+metric computation, and output writing. It writes standard experiment files under
+`outputs/public_e2e_smoke/` during validation; these generated files are not
+committed.
+
 ## Paper-study config dry-run
 
 Command:
@@ -56,10 +78,10 @@ Result: builds the expected direct-baseline spec list and TPE trial plan without
 Command:
 
 ```bash
-uv run ragicamp index --corpus simple --embedding minilm --max-docs 5
+uv run ragicamp index --corpus simple --embedding mock --max-docs 5
 ```
 
-Result: downloads a tiny Simple Wikipedia sample, chunks it, embeds it with `all-MiniLM-L6-v2`, and builds a local FAISS index successfully.
+Result: downloads a tiny Simple Wikipedia sample, chunks it, embeds it with the deterministic mock embedder, and builds a local FAISS index successfully.
 
 Generated local artifacts from this smoke are not committed.
 

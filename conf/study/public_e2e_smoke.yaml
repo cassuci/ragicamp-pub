@@ -1,0 +1,51 @@
+# End-to-end public smoke config.
+# Runs a tiny DirectLLM + FixedRAG study with deterministic mock providers.
+# Intended command:
+#   uv run ragicamp run conf/study/public_e2e_smoke.yaml --limit 1 --force
+
+name: public_e2e_smoke
+description: "Tiny end-to-end DirectLLM + FixedRAG smoke test with mock providers"
+
+datasets:
+  - nq
+
+metrics:
+  - f1
+  - exact_match
+
+direct:
+  enabled: true
+  models:
+    - mock:answer
+  prompts:
+    - concise
+
+rag:
+  enabled: true
+  models:
+    - mock:answer
+  corpus:
+    source: wikimedia/wikipedia
+    version: 20231101.simple
+    max_docs: 5
+    streaming: true
+  retrievers:
+    - type: dense
+      name: public_mock_dense
+      embedding_index: public_mock_dense_c128_o20
+      embedding_model: mock-embedder
+      embedding_backend: mock
+      chunk_size: 128
+      chunk_overlap: 20
+      chunking_strategy: recursive
+      index_type: flat
+  top_k_values:
+    - 1
+  prompts:
+    - concise
+  query_transform:
+    - none
+  reranker:
+    configs:
+      - enabled: false
+        name: none

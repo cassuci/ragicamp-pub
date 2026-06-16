@@ -66,7 +66,12 @@ class ProviderFactory:
         else:
             provider, model_name = "vllm", spec
 
-        backend = "vllm" if provider == "vllm" else "hf"
+        if provider == "vllm":
+            backend = "vllm"
+        elif provider == "mock":
+            backend = "mock"
+        else:
+            backend = "hf"
 
         return GeneratorConfig(
             model_name=model_name,

@@ -14,14 +14,14 @@ class ConfigError(ValueError):
 
 # Valid configuration values
 VALID_DATASETS = {"nq", "triviaqa", "hotpotqa", "techqa", "pubmedqa"}
-VALID_PROVIDERS = {"hf", "openai", "vllm"}
+VALID_PROVIDERS = {"hf", "openai", "vllm", "mock"}
 
 
 def validate_model_spec(spec: str) -> None:
     """Validate model specification format.
 
     Args:
-        spec: Model spec like 'hf:google/gemma-2b-it' or 'openai:gpt-4o-mini'
+        spec: Model spec like 'hf:google/gemma-2b-it', 'openai:gpt-4o-mini', or 'mock:answer'
 
     Raises:
         ConfigError: If spec format is invalid

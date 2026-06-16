@@ -70,10 +70,12 @@ class EmbedderProvider(ModelProvider):
                     embedder = self._load_vllm(gpu_fraction)
                 elif self.config.backend == "sentence_transformers":
                     embedder = self._load_sentence_transformers()
+                elif self.config.backend == "mock":
+                    embedder = MockEmbedderWrapper()
                 else:
                     raise ValueError(
                         f"Unknown embedder backend: '{self.config.backend}'. "
-                        f"Supported: 'vllm', 'sentence_transformers'"
+                        f"Supported: 'vllm', 'sentence_transformers', 'mock'"
                     )
 
                 _load_s = _pc() - _t0
@@ -139,6 +141,31 @@ class ManagedEmbedder(ABC):
 
     def unload(self) -> None:  # noqa: B027
         """Unload model (optional override)."""
+
+
+class MockEmbedderWrapper(ManagedEmbedder):
+    """Deterministic hash-based embedder for smoke tests and public validation."""
+
+    dim = 16
+
+    def batch_encode(self, texts: list[str]) -> Any:
+        import hashlib
+
+        import numpy as np
+
+        rows = []
+        for text in texts:
+            digest = hashlib.sha256(text.encode("utf-8")).digest()
+            values = np.frombuffer(digest[: self.dim], dtype=np.uint8).astype(np.float32)
+            values = (values / 127.5) - 1.0
+            norm = np.linalg.norm(values)
+            if norm > 0:
+                values = values / norm
+            rows.append(values)
+        return np.vstack(rows).astype(np.float32)
+
+    def get_dimension(self) -> int:
+        return self.dim
 
 
 class VLLMEmbedderWrapper(ManagedEmbedder):
